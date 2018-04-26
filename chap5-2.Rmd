@@ -38,9 +38,55 @@ save.image('output/result-model5-4.RData')
 ```
 
 
+```{r summary}
+summary(fit)$summary
+
+```
+
+
+```{r}
+ms = rstan::extract(fit)
+data.frame.quantile.mcmc = function(x, y_mcmc){
+        probs = c(2.5, 10, 25, 50, 75, 90, 97.5)/100
+        qua = apply(y_mcmc, 2, quantile, probs = probs)
+        d = data.frame(X = x, t(qua))
+        colnames(d) = c("X", paste0('p', probs*100))
+        return(d)
+}
+
+d_est = data.frame.quantile.mcmc(1:50, ms$y_pred)
+d_est
+
+ggplot.5quantile = function(data){
+        p = ggplot(data, aes(x = Score, y = p50))
+        p = p + theme_bw(base_size = 18)
+        p = p + geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6)
+        p = p + geom_line(size=1)
+        return(p)
+}
 
 
 
+d = data.frame(d, d_est)
+d
+
+
+ggplot.5quantile(d[d$A == 0,]) + 
+        geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6, data = d[d$A == 1,]) +  
+        geom_line(aes(y = p50), data = d[d$A ==1,], size = 1, colour = "#89BDDE") + 
+        geom_point(data = d, aes(colour = factor(A)))
+
+```
+
+```{r}
+
+ggplot(d, aes(x = Y)) + 
+        geom_point(aes(y = p50, colour = factor(A))) + 
+        ylim(c(0,80)) + 
+        xlim(c(0,80)) + 
+        geom_errorbar(aes(ymin = p10, ymax = p90, colour = factor(A))) + 
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+```
 
 
 
