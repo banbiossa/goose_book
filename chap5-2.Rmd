@@ -1,0 +1,52 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(rstan)
+require(tidyverse)
+require(GGally)
+
+```
+
+```{r load}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data-attendance-2.txt")
+d
+```
+
+```{r ggally}
+ggpairs(d)
+```
+
+
+```{r stan}
+data = list(N = nrow(d), A=d$A, Score=d$Score/200, M = d$M, Y=d$Y)
+fit = stan(file = "model/model5-4.stan", data= data, seed = 1234)
+data
+```
+
+
+
+
+```{r}
+#d <- read.csv(file='input/data-attendance-2.txt')
+data <- list(N=nrow(d), A=d$A, Score=d$Score/200, M=d$M, Y=d$Y)
+fit <- stan(file='model/model5-4.stan', data=data, seed=1234)
+
+save.image('output/result-model5-4.RData')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

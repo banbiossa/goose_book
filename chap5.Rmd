@@ -144,8 +144,5 @@ A
 sweep(A, 1, 5)
 ```
 
-```{r}
-ggpairs(data.frame(ms)[,1:6])
 
-```
 
