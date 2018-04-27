@@ -1,0 +1,148 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+# What
+- chapter 5 of the goose book
+```{r library}
+require(rstan)
+require(tidyverse)
+require(GGally)
+```
+
+```{r input}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data-attendance-1.txt")
+d
+```
+
+```{r qplot}
+qplot(Score, Y, data = d, colour = factor(A))
+```
+
+
+
+```{r pair plot }
+ggpairs(d)
+
+```
+
+
+```{r stan}
+data = list(N = nrow(d), A=d$A, Score=d$Score/200, Y=d$Y)
+fit = stan(file = "model/model5-3b.stan", data= data, seed = 1234)
+
+```
+
+```{r fit}
+fit
+
+```
+
+# Trace plot
+```{r trace}
+require(ggmcmc)
+ggmcmc(ggs(fit, inc_warmup = T, stan_include_auxiliar = T), 
+       file = "output/model5-3_trace.pdf", plot = "traceplot",
+       family = "b")
+
+```
+
+# Confidence Intervals
+
+```{r ms}
+ms = rstan::extract(fit)
+
+data.frame.quantile.mcmc = function(x, y_mcmc, prefix = "p"){
+        probs = c(2.5, 10, 25, 50, 75, 90, 97.5)/100
+        qua = apply(y_mcmc, 2, quantile, probs = probs)
+        d = data.frame(X = x, t(qua))
+        colnames(d) = c("X", paste0(prefix, probs*100))
+        return(d)
+}
+
+d_est = data.frame.quantile.mcmc(1:50, ms$y_pred)
+d_est
+
+d_error = data.frame.quantile.mcmc(1:50, ms$error, "ep")
+
+ggplot.5quantile = function(data){
+        p = ggplot(data, aes(x = Score, y = p50))
+        p = p + theme_bw(base_size = 18)
+        p = p + geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6)
+        p = p + geom_line(size=1)
+        return(p)
+}
+
+
+
+d = data.frame(d, d_est)
+d = data.frame(d, d_error)
+d
+
+#ggplot.5quantile(d_est)
+
+ggplot.5quantile(d[d$A == 0,]) + 
+        geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6, data = d[d$A == 1,]) +  
+        geom_line(aes(y = p50), data = d[d$A ==1,], size = 1, colour = "#89BDDE") + 
+        geom_point(data = d, aes(colour = factor(A)))
+
+```
+
+
+# Observed-Estimated plot
+```{r observed and estimated}
+d
+
+ggplot(d, aes(x = Y)) + 
+        geom_point(aes(y = p50, colour = factor(A))) + 
+        ylim(c(0,0.5)) + 
+        xlim(c(0,0.5)) + 
+        geom_errorbar(aes(ymin = p10, ymax = p90, colour = factor(A))) + 
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+
+?geom_abline
+
+```
+
+
+# Error plot
+
+
+```{r}
+d
+
+qplot(ep50, data = d, geom = "density", colour = factor(A))
+qplot(apply(errors, 2, median), geom = "density")
+qplot(apply(errors, 2, mean), geom = "density")
+#qplot(apply(errors, 2, map), geom = "density")
+?mode
+
+```
+
+```{r}
+d_mode = data.frame(t(apply(errors, 2, function(x){
+        dens = density(x)
+        mode_i = which.max(dens$y)
+        mode_x = dens$x[mode_i]
+        mode_y = dens$y[mode_i]
+        c(mode_x, mode_y)
+})))
+
+d_mode
+qplot(d_mode$X1, geom = "density") + 
+        geom_histogram(aes(x = d_mode$X1))
+```
+
+
+
+```{r}
+A <- array(1:24, dim = 4:2)
+A
+sweep(A, 1, 5)
+```
+
+
+

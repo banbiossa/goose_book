@@ -40,16 +40,24 @@ d
 ```
 
 
-```{r convert}
-conv = c(0, 0.2, 1)
-names(conv) = c("A", "B", "C")
-conv
+# Weather
+- make weather into a dummy variable
+- B for cloudy so W_C, C for rain so W_R
+
+```{r dummy}
+dummies = model.matrix(~d$Weather + 0)
+d = data.frame(d, dummies)
+d = d %>% select(-Weather)
+d = d %>%
+        mutate_at(vars(starts_with("d.")), as.integer)
+d
+
 ```
 
 
 ```{r stan}
-data = list(I = nrow(d), A=d$A, Score=d$Score/200, W = conv[d$Weather], Y=d$Y)
-fit = stan(file = "model/model5-5.stan", data= data, seed = 1234)
+data = list(I = nrow(d), A=d$A, Score=d$Score/200, W_S=d$d.WeatherA, W_C = d$d.WeatherB, W_R = d$d.WeatherC, Y=d$Y)
+fit = stan(file = "model/model5-5c.stan", data= data, seed = 1234)
 ```
 
 ```{r summary}
