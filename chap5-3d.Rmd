@@ -42,23 +42,20 @@ d
 
 # Weather
 - make weather into a dummy variable
-- B for cloudy so W_C, C for rain so W_R
 
-```{r dummy}
-dummies = model.matrix(~d$Weather + 0)
-d = data.frame(d, dummies)
-d = d %>% select(-Weather)
-d = d %>%
-        mutate_at(vars(starts_with("d.")), as.integer)
-d
-
-```
 
 
 ```{r stan}
-data = list(I = nrow(d), A=d$A, Score=d$Score/200, W_S=d$d.WeatherA, W_C = d$d.WeatherB, W_R = d$d.WeatherC, Y=d$Y)
+d_conv = data.frame(X=c(1,2,3))
+rownames(d_conv) = c("A", "B", "C")
+data = list(I = nrow(d), A=d$A, Score=d$Score/200, WID = d_conv[d$Weather,], Y = d$Y)
 fit = stan(file = "model/model5-5d.stan", data= data, seed = 1234)
 ```
+
+```{r}
+exp(-0.38)/exp(-0.495)
+```
+
 
 ```{r summary}
 max(data.frame(summary(fit)$summary)$Rhat)
@@ -145,7 +142,5 @@ ggplot(roc_coords, aes(x = x_axis, y = sensitivity)) +
         
         
 roc_coords
-
-
 ```
 

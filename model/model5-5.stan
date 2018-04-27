@@ -14,7 +14,7 @@ parameters {
 transformed parameters {
         real q[I];
         for (i in 1:I)
-                q[i] = int_logit(b[1] + b[2]*A[i] + b[3]*Score[i] + b[4]*W[i]);
+                q[i] = inv_logit(b[1] + b[2]*A[i] + b[3]*Score[i] + b[4]*W[i]);
 }
 
 model {
