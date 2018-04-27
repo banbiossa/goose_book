@@ -1,0 +1,79 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+require(GGally)
+
+```
+
+
+```{r load}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data4a.csv")
+d
+```
+
+```{r pairplot}
+ggpairs(d)
+```
+
+```{r dummy}
+code = data.frame(X = c(0,1))
+rownames(code) = c("C", "T")
+code$X = as.integer(code$X)
+code[d$f,]
+code
+```
+
+```{r fit}
+data = list(I = nrow(d), N = d$N, Y = d$y, X = d$x, F = code[d$f,])
+fit = stan(file = "model/model5-p7.stan", data = data, seed = 1234)
+```
+
+```{r look inside}
+fit
+
+```
+
+# Extract
+```{r extract}
+ms = rstan::extract(fit)
+probs = c(10,50,90)/100
+
+d_qua = data.frame(t(apply(ms$y_pred, 2, quantile, probs = probs)))
+colnames(d_qua) = paste0("p", probs*100)
+d_qua
+
+d = bind_cols(d, d_qua)
+d
+```
+
+```{r plot ribbon}
+ggplot(d, aes(x = x, colour = f)) +
+        geom_point(aes(y = y)) + 
+        geom_line(aes(y = p50)) + 
+        geom_ribbon(aes(ymin=p10, ymax=p90, fill = f), alpha = 1/5)
+```
+
+# Y to pred plot
+```{r pred}
+ggplot(d, aes(x = y, colour = f)) + 
+        theme_bw() + 
+        geom_point(aes(y = p50)) + 
+        geom_abline(slope = 1, intercept = 0, linetype = "dotted") + 
+        geom_errorbar(aes(ymin=p10, ymax=p90))
+
+
+```
+
+```{r}
+ggplot(d, aes(x = y, colour = f)) + 
+        theme_bw() + 
+        geom_jitter(aes(y = p50)) + 
+        geom_abline(slope =1, intercept = 0, linetype = "dotted")
+
+```
+

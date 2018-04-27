@@ -1,0 +1,85 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(rstan)
+require(tidyverse)
+require(GGally)
+
+```
+
+```{r load}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data3a.csv")
+
+d
+```
+
+```{r plot}
+ggpairs(d)
+```
+
+# plot
+```{r qplot}
+qplot(x,y,data=d, colour =f)
+
+```
+
+# factors
+```{r factor}
+code = data.frame(X = c(0,1))
+rownames(code) = c("C", "T")
+code$X = as.integer(code$X)
+code[d$f,]
+code
+```
+
+
+```{r stan}
+data = list(N = nrow(d), x = d$x, f = code[d$f,], Y = d$y)
+fit = stan(file = "model/model5-p6.stan", data = data, seed = 1234)
+
+```
+
+```{r fit}
+fit
+
+```
+
+
+```{r plot}
+ms = rstan::extract(fit)
+
+
+probs = c(10, 50, 90)/100
+qua = t(apply(ms$log_lambda, 2, quantile, probs = probs))
+colnames(qua) = c(paste0('p', probs*100))
+d_qua = data.frame(d, qua)
+
+d_qua = d_qua %>%
+        mutate_at(vars(starts_with("P")),exp)
+d_qua
+
+```
+
+```{r ribbon}
+ggplot(d_qua, aes(x = x)) + 
+        geom_point(aes(y = y, colour = f)) + 
+        geom_line(aes(y = p50, colour = f)) + 
+        geom_ribbon(aes(ymin = p10, ymax = p90, fill = f), alpha = 1/5)
+
+```
+
+```{r}
+d_qua
+
+ggplot(d_qua, aes(x = y)) + 
+        geom_point(aes(y = p50, colour = f)) + 
+        geom_errorbar(aes(ymin = p10, ymax = p90, colour = f)) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
+        xlim(c(0,15)) + 
+        ylim(c(0,15))
+
+```
+
