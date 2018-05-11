@@ -1,0 +1,124 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+require(gridExtra)
+
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap08/input/data-salary-3.txt")
+d
+```
+
+# qplot
+```{r qplot}
+qplot(X, Y, data = d, shape = factor(KID), colour = factor(GID))
+
+ggplot(d, aes(X, Y, label = KID)) + 
+        geom_text(size = 3, aes(colour = factor(KID))) + 
+        facet_wrap(~GID)
+
+```
+
+## purrr ls
+```{r purrr ls}
+
+d
+d$KID = as.factor(d$KID)
+d$GID = as.factor(d$GID)
+
+mod_fun = function(df){
+        lm(Y ~ X, data = df)
+}
+
+a_fun = function(mod){
+        coefficients(mod)[[1]]
+}
+        
+b_fun = function(mod){
+        coefficients(mod)[[2]]
+}
+
+d
+nd = d %>%
+        group_by(KID, GID) %>%
+        nest() 
+
+md = nd %>%
+        mutate(model = map(data, mod_fun))
+
+md = md %>%
+        mutate(a= map_dbl(model, a_fun),
+               b= map_dbl(model, b_fun))
+
+ld = md %>%
+        select(KID, GID, a, b) %>%
+        ungroup %>%
+        gather(key = "key", value = "value", -KID, -GID)
+
+ld
+
+g1 = ggplot(ld[ld$key == "a", ], aes(x = value)) + 
+        geom_histogram() +
+        facet_grid(GID ~ key)
+?geom_density
+
+g2 = ggplot(ld[ld$key == "b", ], aes(x = value)) + 
+        geom_histogram() +
+        facet_grid(GID ~ key) + 
+        theme_bw()
+
+grid.arrange(g1, g2, ncol = 2)
+
+```
+
+
+# model 8-5
+```{r 8-5}
+
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap08/input/data-salary-3.txt")
+K2G = unique(d[, c("KID", "GID")])$GID
+data = list(N = nrow(d), K = 30, G = 3, X = d$X, Y = d$Y, KID = d$KID, K2G = K2G)
+fit = stan(file = "model/model8-5.stan", data = data, seed = 1234)
+```
+
+```{r coef}
+ms = rstan::extract(fit)
+fit
+```
+
+```{r make data}
+N_mcmc = length(ms$lp__)
+param_names = c("mcmc", paste0("a1-", 1:3), paste0("b1-", 1:3))
+d_est = data.frame(1:N_mcmc, ms$a1, ms$b1)
+colnames(d_est) =param_names
+d_qua = get_quantiles(d_est[-1], param_names[-1])
+d_melt = gather(d_est, key = "parameter", value = "value", -mcmc)
+d_melt
+d_qua
+```
+
+```{r make plot}
+ggplot() + 
+        coord_flip() + 
+        geom_violin(data = d_melt, aes(x = parameter, y = value), fill = "white", size =1, alpha = 0.3, scale = "width") + 
+        geom_pointrange(data = d_qua, aes(x = key, y = p50, ymin = p10, ymax = p90))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

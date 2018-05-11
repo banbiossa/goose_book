@@ -1,0 +1,111 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap08/input/data-salary-2.txt")
+d
+
+```
+
+```{r qplot}
+d$KID = as.factor(d$KID)
+res_lm = lm(Y~X, data = d)
+coef = as.numeric(res_lm$coefficients)
+
+ggplot(d, aes(x = X, y = Y, shape = KID)) + 
+        geom_point(size = 3) + 
+        scale_shape_manual(values = c(16,2,4,9)) + 
+        geom_abline(intercept = coef[1], slope = coef[2], size = 2, alpha = 0.3)
+        
+
+```
+
+```{r plot whole}
+ggplot(d, aes(x = X, y = Y, shape = KID)) + 
+        theme_bw(base_size = 20) +
+        geom_abline(intercept = coef[1], slope = coef[2], size = 2, alpha = 0.3) + 
+        geom_point(size = 3) + 
+        scale_shape_manual(values = c(16,2,4,9)) +
+        facet_wrap(~KID) + 
+        geom_line(stat="smooth", method = "lm", se=F, size = 1, color = "black", linetype = "31", alpha = 0.8)
+```
+
+# model 8-2
+
+```{r 8-2}
+data = list(N = nrow(d), K = 4, X = d$X, Y = d$Y, KID = as.numeric(d$KID))
+fit = stan(file = "model/model8-2.stan", data = data, seed = 1234)
+```
+
+```{r coef}
+ms = rstan::extract(fit)
+
+fit
+```
+
+
+```{r bayseian quantiles}
+
+probs = c(10, 50, 90)/100
+qua = t(apply(ms$s_Y, 2, quantile, probs = probs))
+colnames(qua) = c(paste0('p', probs*100))
+rownames(qua) = c(paste0("a", 1:4))
+result = data.frame(qua)
+
+get_quantiles = function(ms_data, rownames_to_set){
+        probs = c(10, 50, 90)/100
+        qua = t(apply(ms_data, 2, quantile, probs = probs))
+        qua
+        colnames(qua) = c(paste0('p', probs*100))
+        result = data.frame(qua)
+        result$key = rownames_to_set
+        result = result %>% select(key, everything())
+        return(result)
+}
+
+result_a = get_quantiles(ms$a, c(paste0("a", 1:4)))
+result_b = get_quantiles(ms$b, c(paste0("b", 1:4)))
+result_s = get_quantiles(matrix(ms$s_Y, ncol = 1), "s")
+result_y = get_quantiles(ms$Y_pred, c(paste0("Y", 1:40)))
+
+result = bind_rows(result_a, result_b, result_s, result_y)
+result
+
+
+d = bind_cols(d, result_y)
+```
+
+
+## plot 
+```{r plot it}
+d
+
+ggplot(d, aes(X, Y, shape = KID)) + 
+        geom_point(size = 3) + 
+        theme_bw(base_size = 20) + 
+        scale_shape_manual(values = c(16, 2, 4,9)) + 
+        facet_wrap(~KID) + 
+        geom_ribbon(aes(ymin = p10, ymax = p90), color = "black", alpha = 1/5)
+        
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

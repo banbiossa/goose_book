@@ -1,0 +1,50 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+require(GGally)
+
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-ZIP.txt")
+d
+
+```
+
+```{r ggpairs}
+ggpairs(d)
+
+```
+
+
+```{r lm}
+fit = lm(Y ~ ., data = d)
+summary(fit)
+```
+
+
+```{r plot predict}
+qplot(predict(fit), d$Y, colour = as.factor(d$Sex), size = d$Age, shape = as.factor(d$Sake))
+```
+
+```{r qplot itself}
+qplot(x = Age, y = Y, data = d, colour = as.factor(Sex), size = 3, shape = as.factor(Sake), facets = .~Sex) + 
+        ggplot2::scale_shape_manual(values = c(16,4))
+```
+
+
+```{r fit2}
+fit2 = lm(Y ~ Age + Sex*Sake - Sex, data = d)
+summary(fit2)
+
+```
+
+
+
+

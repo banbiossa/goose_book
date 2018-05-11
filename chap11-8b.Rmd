@@ -1,0 +1,119 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r library}
+require(tidyr)
+require(rstan)
+require(gtools)
+
+```
+
+
+```{r read}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-lda.txt")
+d
+
+```
+
+```{r plot}
+d_table = d %>%
+        group_by(PersonID, ItemID) %>%
+        count
+
+qplot(ItemID, PersonID, data = d_table, colour = n)
+
+n_item = d %>%
+        group_by(ItemID) %>%
+        count
+qplot(ItemID, data=d, geom="bar")
+qplot(PersonID, data = d, geom="bar")
+
+```
+
+
+# Simulation
+```{r simulation}
+N = 50
+I = 120
+K = 6
+
+set.seed(123)
+alpha0 = rep(0.8, K)
+alpha1 = rep(0.2, I)
+theta = gtools::rdirichlet(N, alpha0)
+phi = gtools::rdirichlet(N, alpha1)
+
+num_items_by_n = round(exp(rnorm(N, 2.0, 0.5)))
+
+d = data.frame()
+for(n in 1:N){
+        z= sample(K, num_items_by_n[n], prob = theta[n,], replace = TRUE)
+        item = sapply(z, function(k) sample(I, 1, prob = phi[k,]))
+        d = rbind(d, data.frame(PersonID = n, ItemID = item))
+}
+d
+
+```
+
+
+
+
+# stan
+```{r read}
+
+require(rstan)
+require(tidyverse)
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-lda.txt")
+
+```
+
+```{r summarize}
+# make into one row one person, one product ID
+d_count = d %>%
+        group_by(PersonID, ItemID) %>%
+        count
+
+d_count
+```
+
+
+```{r stan}
+E = nrow(d_count)
+N = 50
+K = 6
+I = 120
+data = list(E = E, N = N, I = I, K =K, 
+            PersonID = d_count$PersonID, ItemID = d_count$ItemID, n = d_count$n, Alpha = rep(0.5, I))
+
+stanmodel = stan_model(file = "model/model11-8b.stan")
+fit_vb = vb(stanmodel, data = data, seed =123)
+
+```
+
+
+```{r}
+require(tidyverse)
+ms <- rstan::extract(fit_vb)
+
+probs <- c(0.1, 0.25, 0.5, 0.75, 0.9)
+idx <- expand.grid(1:K, 1:I)
+
+d_qua <- t(apply(idx, 1, function(x) quantile(ms$phi[,x[1],x[2]], probs=probs)))
+d_qua <- data.frame(idx, d_qua)
+colnames(d_qua) <- c('tag', 'item', paste0('p', probs*100))
+
+p <- ggplot(data=d_qua, aes(x=item, y=p50))
+p <- p + theme_bw(base_size=18)
+p <- p + facet_wrap(~tag, ncol=3)
+p <- p + coord_flip()
+p <- p + scale_x_reverse(breaks=c(1, seq(20, 120, 20)))
+p <- p + geom_bar(stat='identity')
+p <- p + labs(x='ItemID', y='phi[k,y]')
+#ggsave(file='output/fig11-11-left.png', plot=p, dpi=300, w=7, h=5)
+p
+
+```
+

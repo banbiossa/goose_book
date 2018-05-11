@@ -1,0 +1,15 @@
+data {
+  int N;
+  int<lower=0, upper=1> Y[N];
+}
+
+parameters {
+  real<lower=0, upper=1> q;
+}
+
+model {
+  target += log_sum_exp(
+          log(0.5) + bernoulli_lpmf(Y|q),
+          log(0.5) + bernoulli_lpmf(Y|1)
+  )
+}

@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(rstan)
+require(tidyverse)
+require(GGally)
+
+```
+
+```{r load}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data-attendance-3.txt")
+
+d
+```
+
+```{r ggally}
+ggpairs(d)
+```
+
+```{r crosstab}
+d %>%
+        group_by(Weather) %>%
+        summarise(Y = sum(Y), n = n()) %>%
+        ungroup %>%
+        mutate(ratio = Y/n)
+
+```
+
+```{r crosstabl A}
+d %>%
+        group_by(A) %>%
+        summarise(Y = sum(Y), n = n()) %>%
+        ungroup %>%
+        mutate(ratio = Y/n)
+d
+
+```
+
+
+```{r convert}
+conv = c(0, 0.2, 1)
+names(conv) = c("A", "B", "C")
+conv
+```
+
+
+```{r stan}
+data = list(I = nrow(d), A=d$A, Score=d$Score/200, W = conv[d$Weather], Y=d$Y)
+fit = stan(file = "model/model5-3v.stan", data= data, seed = 1234)
+```
+
+```{r summary}
+max(data.frame(summary(fit)$summary)$Rhat)
+summary(fit)
+```
+
+
+```{r make data frame}
+ms = rstan::extract(fit)
+
+probs = c(10, 50, 90)/100
+qua = t(apply(ms$q, 2, quantile, probs = probs))
+colnames(qua) = c(paste0('p', probs*100))
+d_qua = data.frame(d, qua)
+d_qua$Y <- as.factor(d_qua$Y)
+d_qua$A <- as.factor(d_qua$A)
+d_qua
+```
+
+
+```{r plot}
+p = ggplot(d_qua, aes(x = Y, y = p50))
+p = p + theme_bw(base_size = 18)
+p = p + coord_flip()
+p = p + geom_violin(trim = F, size = 1.5, color='grey80')
+p = p + geom_point(aes(colour = A), position = position_jitter(w = 0.4, h = 0), size = 1)
+p = p + scale_color_manual(values = c("grey5", "grey50"))
+p <- p + labs(x='Y', y='q')
+p
+
+
+```
+
+```{r roc}
+require(pROC)
+
+N_mcmc <- length(ms$lp__)
+spec <- seq(from=0, to=1, len=201)
+probs <- c(0.1, 0.5, 0.9)
+
+auces <- numeric(N_mcmc)
+m_roc <- matrix(nrow=length(spec), ncol=N_mcmc)
+for (i in 1:N_mcmc) {
+  roc_res <- roc(d$Y, ms$q[i,])
+  auces[i] <- as.numeric(roc_res$auc)
+  m_roc[,i] <- coords(roc_res, x=spec, input='specificity', ret='sensitivity')
+}
+
+# quantile(auces, prob=probs)
+d_est <- data.frame(1-spec, t(apply(m_roc, 1, quantile, prob=probs)))
+colnames(d_est) <- c('X', paste0('p', probs*100))
+
+p <- ggplot(data=d_est, aes(x=X, y=p50))
+p <- p + theme_bw(base_size=18) + theme(legend.position='none')
+p <- p + coord_fixed(ratio=1, xlim=c(0,1), ylim=c(0,1))
+p <- p + geom_abline(intercept=0, slope=1, alpha=0.5)
+p <- p + geom_ribbon(aes(ymin=p10, ymax=p90), fill='black', alpha=2/6)
+p <- p + geom_line(size=1)
+p <- p + labs(x='False Positive', y='True Positive')
+ggsave(file='output/fig5-11.png', plot=p, dpi=300, w=4, h=4)
+
+p
+
+d_est
+
+```
+
+# simple roc
+```{r roc simple}
+d_qua
+
+roc_simple = roc(d_qua$Y, d_qua$p50) 
+roc_simple
+plot(roc_simple)
+
+roc_coords = data.frame(t(coords(roc_simple, x =spec)))
+roc_coords = roc_coords %>%
+        mutate(x_axis = 1-specificity)
+
+ggplot(roc_coords, aes(x = x_axis, y = sensitivity)) + 
+        geom_line()  +
+        coord_fixed(ratio=1, xlim=c(0,1),ylim=c(0,1)) +
+        geom_abline(slope = 1, intercept = 0, alpha = 0.5) 
+        
+        
+roc_coords
+
+
+```
+

@@ -1,0 +1,33 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Chap 11-1
+```{r library}
+require(tidyverse)
+require(rstan)
+
+```
+
+## data
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-coin.txt")
+d
+
+table(d)
+```
+
+## stan
+```{r stan}
+data = list(N = nrow(d), Y = d$Y)
+fit = stan(file = "model/model11-1f.stan", data = data, seed = 1234)
+```
+
+## metrics
+```{r metrics}
+fit
+ms = rstan::extract(fit)
+
+```
+

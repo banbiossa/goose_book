@@ -1,0 +1,93 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(rstan)
+require(tidyverse)
+require(GGally)
+
+```
+
+```{r load}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap05/input/data-attendance-2.txt")
+d
+```
+
+```{r ggally}
+ggpairs(d)
+```
+
+
+```{r stan}
+data = list(N = nrow(d), A=d$A, Score=d$Score/200, M = d$M)
+fit = stan(file = "model/model5-6bv.stan", data= data, seed = 1234)
+data
+```
+
+
+```{r summary}
+fit
+summary(fit)$summary
+```
+
+
+```{r}
+ms = rstan::extract(fit)
+data.frame.quantile.mcmc = function(x, y_mcmc, preface="p"){
+        probs = c(2.5, 10, 25, 50, 75, 90, 97.5)/100
+        qua = apply(y_mcmc, 2, quantile, probs = probs)
+        d = data.frame(X = x, t(qua))
+        colnames(d) = c("X", paste0(preface, probs*100))
+        return(d)
+}
+
+d_est = data.frame.quantile.mcmc(1:50, ms$m_pred)
+d_error = data.frame.quantile.mcmc(1:50, ms$error, "ep")
+d_est
+
+ggplot.5quantile = function(data){
+        p = ggplot(data, aes(x = Score, y = p50))
+        p = p + theme_bw(base_size = 18)
+        p = p + geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6)
+        p = p + geom_line(size=1)
+        return(p)
+}
+
+d = data.frame(d, d_est)
+d = data.frame(d, d_error)
+d
+
+ggplot.5quantile(d[d$A == 0,]) + 
+        geom_ribbon(aes(ymin = p10, ymax = p90), fill = "black", alpha = 1/6, data = d[d$A == 1,]) +  
+        geom_line(aes(y = p50), data = d[d$A ==1,], size = 1, colour = "#89BDDE") + 
+        geom_point(data = d, aes(colour = factor(A)))
+
+```
+
+```{r}
+ggplot(d, aes(x = M)) + 
+        geom_point(aes(y = p50, colour = factor(A))) + 
+        ylim(c(0,80)) + 
+        xlim(c(0,80)) + 
+        geom_errorbar(aes(ymin = p10, ymax = p90, colour = factor(A))) + 
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+```
+
+# Error
+```{r errors}
+d
+qplot(ep50, data = d, geom = "density", colour = factor(A))
+qplot(ep50, data = d, fill = factor(A))
+
+
+```
+
+
+
+
+
+
+
+

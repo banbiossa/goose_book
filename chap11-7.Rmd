@@ -1,0 +1,166 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+require(GGally)
+
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-ZIP.txt")
+d
+
+```
+
+```{r stan}
+d$Age = d$Age/10
+X = cbind(1, d[-ncol(d)])
+data = list(N = nrow(d), D = ncol(X), Y = d$Y, X = X)
+fit = stan(file = "model/model11-7.stan", data = data, seed = 123)
+```
+
+```{r ms}
+fit
+ms = rstan::extract(fit)
+```
+
+```{r simulatiion}
+data.frame.quantile.mcmc <- function(x, y_mcmc, probs=c(2.5, 25, 50, 75, 97.5)/100, head = "p") {
+  qua <- apply(y_mcmc, 2, quantile, probs=probs)
+  d <- data.frame(X=x, t(qua))
+  colnames(d) <- c('X', paste0(head, probs*100))
+  return(d)
+}
+
+q_qua = data.frame.quantile.mcmc(1:200, ms$q, probs = c(10,50,90)/100)
+lambda_qua = data.frame.quantile.mcmc(1:200, ms$lambda, probs = c(10, 50, 90)/100, head = "l")
+
+d_with_quantiles = bind_cols(d, q_qua)
+d_with_quantiles = bind_cols(d_with_quantiles, lambda_qua)
+d_with_quantiles
+
+rbinom_fun = function(p){
+        rbinom(1,1,p)
+}
+
+pois_fun = function(b, lambda){
+        if(b == 1){
+                rpois(1, lambda)
+        }else{
+                as.integer(0)
+        }
+}
+
+d_with_quantiles = d_with_quantiles %>%
+        mutate(b = map_int(p50, rbinom_fun),
+               y_sim = map2_int(b, l50, pois_fun)) %>%
+        select(Sex, Sake, Age, Y, y_sim, everything())
+
+d_with_quantiles_for_plot = d_with_quantiles %>%
+        select(Sex, Sake, Age, Y, y_sim) %>%
+        gather(key = "part", value = "Y", -Sex, -Sake, -Age)
+        
+qplot(x = Age, y = Y, data = d_with_quantiles_for_plot, colour = as.factor(Sex), size = 3, 
+      shape = as.factor(Sake), facets = .~part) + 
+        ggplot2::scale_shape_manual(values = c(16,4))
+
+qplot(y_sim, Y, data = d_with_quantiles, colour = as.factor(Sex), size = Age, shape = as.factor(Sake), geom = "jitter")
+
+cor(d$y_sim, d$Y)
+d
+        
+```
+
+
+```{r simulation again}
+d_qua = data.frame(ms$q) %>%
+        mutate(iteration = row_number()) %>%
+        gather(key = "id", value = "q", -iteration)
+
+d_lambda = data.frame(ms$lambda) %>%
+        mutate(iteration = row_number()) %>%
+        gather(key = "id", value = "lambda", -iteration)
+
+d_sim = left_join(d_qua, d_lambda)
+        
+d_sim = d_sim %>%
+        mutate(b = map_int(q, rbinom_fun),
+               y_sim = map2_int(b, lambda, pois_fun))
+
+d_sim_result = d_sim %>%
+        select(-iteration) %>%
+        group_by(id) %>%
+        summarise_all(mean) %>%
+        ungroup %>%
+        mutate(id = str_remove(id, "X"),
+               id = as.integer(id)) %>%
+        arrange(id) %>%
+        rename(X = id)
+
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap11/input/data-ZIP.txt")
+d
+d_sim_result = bind_cols(d, d_sim_result)
+d_sim_result
+
+
+qplot(y_sim, Y, data = d_sim_result, colour = as.factor(Sex), size = Age, shape = as.factor(Sake), geom = "jitter")
+cor(d_sim_result$y_sim, d_sim_result$Y)
+
+```
+
+```{r}
+d_sim_for_comparison = d_sim_result %>%
+        mutate(part = "simulation") %>%
+        select(-Y) %>%
+        rename(Y = y_sim) %>%
+        select(Sex, Sake, Age, Y, part)
+
+d_for_comparison = d %>%
+        mutate(part = "actual")
+
+d_for_plot = bind_rows(d_sim_for_comparison, d_for_comparison)
+
+d_for_plot
+
+qplot(x = Age, y = Y, data = d_for_plot, colour = as.factor(Sex), size = 3, shape = as.factor(Sake), facets = .~part) + 
+        ggplot2::scale_shape_manual(values = c(16,4))
+```
+
+
+
+```{r ggpairs}
+ggpairs(d)
+
+```
+
+
+```{r lm}
+fit = lm(Y ~ ., data = d)
+summary(fit)
+```
+
+
+```{r plot predict}
+qplot(predict(fit), d$Y, colour = as.factor(d$Sex), size = d$Age, shape = as.factor(d$Sake))
+```
+
+```{r qplot itself}
+qplot(x = Age, y = Y, data = d, colour = as.factor(Sex), size = 3, shape = as.factor(Sake), facets = .~Sex) + 
+        ggplot2::scale_shape_manual(values = c(16,4))
+```
+
+
+```{r fit2}
+fit2 = lm(Y ~ Age + Sex*Sake - Sex, data = d)
+summary(fit2)
+
+```
+
+
+
+

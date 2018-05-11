@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r libraries}
+require(tidyverse)
+require(rstan)
+
+```
+
+
+```{r simulate the model}
+run_simulation = function(seed){
+        
+        set.seed(seed)
+        N = 40
+        K = 4
+        N_k = c(15,12,10,3)
+        a0 = 350
+        b0 = 12
+        s_a = 60
+        s_b = 4
+        s_Y = 25
+        X = sample(x = 0:35, size = N, replace = T)
+        KID = rep(1:4, times = N_k)
+        
+        a = rnorm(K, mean = 0, sd = s_a) + a0
+        b = rnorm(K, mean = 0, sd = s_b) + b0
+        
+        d = data.frame(X = X, KID = KID, a = a[KID], b = b[KID])
+        d = transform(d, Y_sim = rnorm(N, mean = a + b*X, sd = s_Y))
+        d$KID = as.factor(d$KID)
+        d
+        
+        p = ggplot(d, aes(x = X, y = Y_sim, shape = KID)) + 
+                theme_bw(base_size = 20) +
+                geom_abline(intercept = coef[1], slope = coef[2], size = 2, alpha = 0.3) + 
+                geom_point(size = 3) + 
+                scale_shape_manual(values = c(16,2,4,9)) +
+                facet_wrap(~KID) + 
+                geom_line(stat="smooth", method = "lm", se=F, size = 1, color = "black", linetype = "31", alpha = 0.8)
+        return(p)
+}
+```
+
+```{r plot whole}
+run_simulation(109)
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap08/input/data-salary-2.txt")
+d
+
+```
+
+```{r newdata for simulation}
+x = 1:max(d$X)
+KID = 1:4
+newdata = expand.grid(x = x, KID = KID)
+
+```
+
+# model 8-3
+```{r 8-2}
+data = list(N = nrow(d), K = 4, X = d$X, Y = d$Y, KID = as.numeric(d$KID), 
+            new_N = nrow(newdata), new_X = newdata$x, new_KID = newdata$KID)
+fit = stan(file = "model/model8-4b.stan", data = data, seed = 1234)
+```
+
+```{r coef}
+ms = rstan::extract(fit)
+fit
+```
+
+
+```{r bayseian quantiles}
+
+probs = c(10, 50, 90)/100
+qua = t(apply(ms$a, 2, quantile, probs = probs))
+colnames(qua) = c(paste0('p', probs*100))
+rownames(qua) = c(paste0("a", 1:4))
+result = data.frame(qua)
+
+get_quantiles = function(ms_data, rownames_to_set){
+        probs = c(10, 50, 90)/100
+        qua = t(apply(ms_data, 2, quantile, probs = probs))
+        qua
+        colnames(qua) = c(paste0('p', probs*100))
+        result = data.frame(qua)
+        result$key = rownames_to_set
+        result = result %>% select(key, everything())
+        return(result)
+}
+
+result_a = get_quantiles(ms$a, c(paste0("a", 1:4)))
+result_b = get_quantiles(ms$b, c(paste0("b", 1:4)))
+result_s = get_quantiles(matrix(ms$s_Y, ncol = 1), "s")
+result_y = get_quantiles(ms$Y_pred, c(paste0("Y", 1:112)))
+
+result = bind_rows(result_a, result_b, result_s, result_y)
+result
+```
+
+
+## plot 
+```{r plot it}
+
+d
+newdata = bind_cols(newdata, result_y)
+newdata
+result_y
+
+d$KID = as.factor(d$KID)
+ggplot(d, aes(X)) + 
+        geom_point(aes(y = Y, shape = KID), size = 3) + 
+        theme_bw(base_size = 20) + 
+        scale_shape_manual(values = c(16, 2, 4,9)) + 
+        facet_wrap(~KID) + 
+        geom_ribbon(aes(x = x, ymin = p10, ymax = p90), color = "black", alpha = 1/5, data = newdata) + 
+        geom_line(aes(x = x, y = p50), color = "black", alpha = 2/5, data = newdata)
+        
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
