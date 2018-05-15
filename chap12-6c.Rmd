@@ -1,0 +1,63 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r require}
+require(tidyverse)
+require(rstan)
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-ss2.txt")
+d
+```
+
+```{r qplot}
+qplot(X, Y, data = d,geom="line")
+```
+
+
+```{r stan}
+T = nrow(d)
+T_pred = 8
+data = list(T = T, Y = d$Y, T_pred = T_pred)
+stanmodel = stan_model(file = "model/model12-6c.stan")
+
+fit = sampling(stanmodel, data = data, seed = 1234, thin = 5, iter = 4000)
+```
+
+```{r fit}
+fit
+ms = rstan::extract(fit)
+probs = c(10, 50, 90)/100
+quantile(ms$s_mu, probs)
+quantile(ms$s_season, probs)
+
+data.frame.mcmc = function(data, header = "q"){
+        df = data.frame(t(apply(data, 2, quantile, probs)))
+        colnames(df) = paste0(header, probs*100)
+        df = df %>% 
+                mutate(x = row_number()) %>%
+                select(x, everything())
+        return(df)
+}
+d_qua = data.frame.mcmc(ms$y_mean, "q")
+d_pred = data.frame.mcmc(ms$y_pred, "y_pred")
+d_pred = d_pred %>%
+        mutate(x = x + nrow(d))
+
+ggplot(d_qua, aes(x = x)) + 
+        geom_line(aes(y = q50)) + 
+        geom_ribbon(aes(ymin = q10, ymax = q90), colour = "black", alpha = 1/5) + 
+        geom_point(aes(x = X, y = Y), colour = "red", data = d, size = 2) + 
+        geom_point(aes(y = y_pred50), colour = "blue", data = d_pred) + 
+        geom_line(aes(y = y_pred50), colour = "blue", data = d_pred) + 
+        geom_ribbon(aes(ymin = y_pred10, ymax = y_pred90), data = d_pred, colour = "blue", alpha = 1/5)
+
+```
+
+```{r }
+
+```
+

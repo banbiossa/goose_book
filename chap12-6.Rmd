@@ -1,0 +1,50 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r require}
+require(tidyverse)
+require(rstan)
+```
+
+```{r data}
+d = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-ss2.txt")
+d
+```
+
+```{r qplot}
+qplot(X, Y, data = d,geom="line")
+```
+
+
+```{r stan}
+T = nrow(d)
+data = list(T = T, Y = d$Y)
+stanmodel = stan_model(file = "model/model12-6.stan")
+
+fit = sampling(stanmodel, data = data, seed = 1234, thin = 5, iter = 4000)
+```
+
+```{r fit}
+fit
+ms = rstan::extract(fit)
+probs = c(10, 50, 90)/100
+quantile(ms$s_mu, probs)
+quantile(ms$s_season, probs)
+
+d_qua = data.frame(x = 1:nrow(d), t(apply(ms$y_mean, 2, quantile, probs)))
+colnames(d_qua) = c("X", paste0("q", probs*100))
+d_qua
+
+ggplot(d_qua, aes(x = X)) + 
+        geom_line(aes(y = q50)) + 
+        geom_ribbon(aes(ymin = q10, ymax = q90), colour = "black", alpha = 1/5) + 
+        geom_point(aes(x = X, y = Y), colour = "red", data = d, size = 2)
+
+```
+
+```{r }
+
+```
+

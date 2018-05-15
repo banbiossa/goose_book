@@ -1,0 +1,181 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r require}
+require(rstan)
+require(tidyverse)
+source("common.R")
+```
+
+```{r data}
+mesh = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh.txt",
+                header = F)
+design = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh-design.txt",
+                  header = F)
+
+mesh
+design
+```
+
+```{r plot}
+colnames(mesh) = 1:24
+mesh = mesh %>% 
+        mutate(i= row_number())
+d_melt = gather(mesh, key = "j", value = "Y", -i)
+d_melt
+
+ggplot(d_melt, aes(x = j, y = i, z = Y, fill = Y)) + 
+        geom_tile(colour = "black") + 
+        scale_fill_gradient2(midpoint = median(d_melt$Y), low = "black", mid = "gray50", high = "white") + 
+        coord_cartesian(xlim = c(0.5, 24.5), ylim = c(0.5, 16.5))
+```
+
+
+# add noise
+
+```{r noise}
+d_noise = d_melt %>%
+        mutate(Y_noise = Y + rnorm(1, 0, sd(d_melt$Y)/3))
+d_noise
+
+ggplot(d_noise, aes(x = j, y = i, z = Y_noise, fill = Y)) + 
+        geom_tile(colour = "black") + 
+        scale_fill_gradient2(midpoint = median(d_melt$Y), low = "black", mid = "gray50", high = "white") + 
+        coord_cartesian(xlim = c(0.5, 24.5), ylim = c(0.5, 16.5))
+
+```
+
+# Stan
+```{r stan}
+d= read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh.txt",
+                header = F)
+T = 96
+I = nrow(d)
+J = ncol(d)
+loess_res = loess(Y ~ i + j, data = d_melt, span = 0.1)
+smoothed = matrix(loess_res$fitted, nrow = I, ncol = J)
+
+TID = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh-design.txt",
+                  header = F)
+
+data = list(I = I, J = J, Y = d, T = T, TID = TID)
+
+stanmodel = stan_model(file = "model/model12-13.stan")
+
+fit = sampling(stanmodel, data = data, seed = 1234, thin = 5, iter = 5200, warmup = 200,
+               init = function(){
+                       list(r = smoothed, s_r = 1, s_Y = 1, s_beta = 1, beta = rnorm(T, 0, 0.1))
+               })
+
+```
+
+# check fit
+```{r fit}
+ms = rstan::extract(fit)
+r_median = apply(ms$r, c(2,3), median)
+persp(1:I, 1:J, r_median, theta = 55, phi = 40, expand = 0.5)
+
+TID = as.matrix(TID)
+d = as.matrix(d)
+mean_Y = sapply(1:T, function(t) {mean(d[TID==t]) - mean(d)})
+
+d_est = data.frame.quantile.mcmc(x = mean_Y, y_mcmc = ms$beta)
+ggplot.obspred(data = d_est, xylim = c(-5,5), size = 0.8)
+```
+
+```{r}
+
+colnames(mesh) = 1:24
+mesh = mesh %>% 
+        mutate(i= row_number())
+d_melt = gather(mesh, key = "j", value = "Y", -i)
+d_melt
+```
+
+```{r with noise}
+
+error_rate = 0.09
+
+noise = rnorm(nrow(d_melt), 0, sd(d_melt$Y)*error_rate)
+#noise = rcauchy(1, 0, sd(d_melt$Y)/error_rate)
+#noise = 3
+d_noise = d_melt %>%
+        mutate(Y_noise = Y + noise)
+d_noise
+
+ggplot(d_noise, aes(x = j, y = i, z = Y_noise, fill = Y_noise)) + 
+        geom_tile(colour = "black") + 
+        scale_fill_gradient2(midpoint = median(d_noise$Y_noise), low = "black", mid = "gray50", high = "white") + 
+        coord_cartesian(xlim = c(0.5, 24.5), ylim = c(0.5, 16.5))
+
+d_noise$j = factor(d_noise$j, levels = c(1:24))
+d_noise_spread = d_noise %>%
+        select(-Y) %>%
+        spread(key = j, value = Y_noise) %>%
+        select(-i)
+
+d_noise_spread = as.matrix(d_noise_spread)
+d_noise_spread
+
+d= read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh.txt",
+                header = F)
+T = 96
+I = nrow(d)
+J = ncol(d)
+d_noise$j = as.integer(d_noise$j)
+loess_res = loess(Y_noise ~ i + j, data = d_noise, span = 0.1)
+smoothed = matrix(loess_res$fitted, nrow = I, ncol = J)
+
+TID = read.csv("https://raw.githubusercontent.com/MatsuuraKentaro/RStanBook/master/chap12/input/data-2Dmesh-design.txt",
+                  header = F)
+
+data = list(I = I, J = J, Y = d_noise_spread, T = T, TID = TID)
+
+stanmodel = stan_model(file = "model/model12-13.stan")
+
+fit = sampling(stanmodel, data = data, seed = 1234, thin = 5, iter = 5200, warmup = 200,
+               init = function(){
+                       list(r = smoothed, s_r = 1, s_Y = 1, s_beta = 1, beta = rnorm(T, 0, 0.1))
+               })
+
+ms = rstan::extract(fit)
+r_median = apply(ms$r, c(2,3), median)
+persp(1:I, 1:J, r_median, theta = 55, phi = 40, expand = 0.5)
+r_median
+
+TID = as.matrix(TID)
+d = as.matrix(d)
+mean_Y = sapply(1:T, function(t) {mean(d[TID==t]) - mean(d)})
+
+d_est = data.frame.quantile.mcmc(x = mean_Y, y_mcmc = ms$beta)
+ggplot.obspred(data = d_est, xylim = c(-5,5), size = 0.8)
+```
+
+
+```{r stan again}
+
+stanmodel = stan_model(file = "model/model12-13b.stan")
+data <- list(I=I, J=J, Y=d_noise_spread, T=T, TID=TID, S_s_Y=0.1)
+
+fit = sampling(stanmodel, data = data, seed = 1234, thin = 5, iter = 5200, warmup = 200,
+               init = function(){
+                       list(r = smoothed, s_r = 1, s_Y = 1, s_beta = 1, beta = rnorm(T, 0, 0.1))
+               })
+
+ms = rstan::extract(fit)
+r_median = apply(ms$r, c(2,3), median)
+persp(1:I, 1:J, r_median, theta = 55, phi = 40, expand = 0.5)
+r_median
+
+TID = as.matrix(TID)
+d = as.matrix(d)
+mean_Y = sapply(1:T, function(t) {mean(d[TID==t]) - mean(d)})
+
+d_est = data.frame.quantile.mcmc(x = mean_Y, y_mcmc = ms$beta)
+ggplot.obspred(data = d_est, xylim = c(-5,5), size = 0.8)
+
+```
+
+

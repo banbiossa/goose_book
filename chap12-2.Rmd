@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r require}
+require(rstan)
+require(tidyverse)
+
+```
+
+
+- mu[t] = rnorm(mu[t-1], sigma_mu)
+- Y[t] = rnorm(mu[t], sigma_Y)
+
+equivalent to 
+- mu[t] = mu[t-1] + e_mu[t-1]
+- Y[t] = mu[t] + e_Y[t]
+- e_mu[t] = rnorm(0, sigma_mu)
+- e_Y[t] = rnorm(0, sigma_Y)
+```{r simulation}
+sigma_mu = 7
+sigma_Y = 1
+
+t = 100
+set.seed(42)
+
+# e_mu[t] = rnorm(0, sigma_mu)
+# e_Y[t] = rnorm(0, sigma_Y)
+e_mu = rnorm(t, 0, sigma_mu)
+e_Y = rnorm(t, 0, sigma_Y)
+
+# mu[t] = mu[t-1] + e_mu[t-1]
+# Y[t] = mu[t] + e_Y[t]
+mu = rep.int(0, t)
+Y = rep.int(0, t)
+for(i in 2:t){
+        mu[i] = mu[i-1] + e_mu[i-1]
+}
+for(i in 1:t){
+        Y[i] = mu[i] + e_Y[i]
+}
+
+d = data.frame(x = 1:t, mu, Y, e_mu, e_Y)
+d
+
+ggplot(d, aes(x = x)) + 
+        geom_line(aes(y = Y))
+```
+
+```{r }
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
